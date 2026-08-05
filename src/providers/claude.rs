@@ -19,9 +19,27 @@ pub struct ClaudeProvider;
 
 impl Provider for ClaudeProvider {
     fn load_session(session_id: &str) -> Result<Session> {
+        validate_session_id(session_id)?;
         let path = find_session_file(session_id)?;
         parse_session_file(session_id, &path)
     }
+}
+
+fn validate_session_id(session_id: &str) -> Result<()> {
+    const MAX_SESSION_ID_LENGTH: usize = 128;
+
+    if session_id.is_empty() || session_id.len() > MAX_SESSION_ID_LENGTH {
+        bail!("session ID must contain between 1 and {MAX_SESSION_ID_LENGTH} characters");
+    }
+
+    if !session_id
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        bail!("session ID may contain only ASCII letters, numbers, hyphens, and underscores");
+    }
+
+    Ok(())
 }
 
 fn find_session_file(session_id: &str) -> Result<PathBuf> {
@@ -184,6 +202,23 @@ mod tests {
             },
         ]);
 
-        assert_eq!(extract_text_from_content(content).unwrap(), "first\n\nsecond");
+        assert_eq!(
+            extract_text_from_content(content).unwrap(),
+            "first\n\nsecond"
+        );
+    }
+
+    #[test]
+    fn accepts_expected_session_ids() {
+        assert!(validate_session_id("797df13f-41e5-4ccd-9f00-d6f6b9bee0b3").is_ok());
+        assert!(validate_session_id("agent_session-123").is_ok());
+    }
+
+    #[test]
+    fn rejects_session_ids_with_path_or_control_characters() {
+        assert!(validate_session_id("").is_err());
+        assert!(validate_session_id("../session").is_err());
+        assert!(validate_session_id("session/other").is_err());
+        assert!(validate_session_id("session\nheader").is_err());
     }
 }

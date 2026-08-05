@@ -27,7 +27,7 @@ fn render_session_markdown(session: &Session, provider_name: &str) -> String {
     for (index, message) in session.messages.iter().enumerate() {
         output.push_str(&format!("### {}\n", message.role));
         output.push_str(&message.content);
-        output.push_str("\n");
+        output.push('\n');
 
         if index + 1 != session.messages.len() {
             output.push_str("\n---\n\n");

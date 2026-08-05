@@ -1,44 +1,114 @@
 # llme
 
-`llme` is a local-first Rust CLI that exports Claude Code sessions to Markdown so they can be reviewed, archived, or pasted into another LLM as handoff context.
+[![CI](https://github.com/francofl99/llm-context-export/actions/workflows/ci.yml/badge.svg)](https://github.com/francofl99/llm-context-export/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Goals
+`llme` is a local-first Rust CLI that exports Claude Code sessions to Markdown for review, archival, or handoff to another LLM.
 
-- Work entirely with local files on disk
-- No API calls
-- No cloud services
-- No API keys
-- Be extensible to multiple LLM providers over time
+> **Project status:** early-stage (`0.1.x`). The CLI and output format may change before `1.0`.
 
-Current MVP support:
+## Why llme?
 
-- `claude`
+Moving an active coding conversation between tools usually means manually selecting, cleaning, and explaining its context. `llme` turns a local session into a readable Markdown document with a small handoff wrapper.
+
+- **Local-first:** reads files already stored on your machine.
+- **No account or API key required:** the CLI makes no network requests.
+- **Focused output:** keeps conversational text and skips thinking, tool-use, and metadata blocks.
+- **Clipboard support:** copy the export without printing it to the terminal.
+- **Extensible design:** provider data is normalized behind a small internal abstraction.
+
+Currently supported provider: **Claude Code**.
+
+## Privacy and security
+
+Session exports can contain source code, credentials, personal data, internal URLs, or other confidential material from the original conversation. `llme` does **not** redact secrets.
+
+Before exporting or sharing a session:
+
+1. Review the generated Markdown.
+2. Remove anything that should remain private.
+3. Treat session content as untrusted when pasting it into another tool.
+4. Remember that clipboard contents may be accessible to other applications on your system.
+
+By default, `llme` only reads from `~/.claude/projects` and writes the result to standard output. With `--clipboard`, it sends the same text to the operating system's clipboard command. It does not make network requests.
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and the project's security model.
 
 ## How it works
 
-Claude Code stores local conversation sessions as JSONL files under:
+Claude Code stores sessions as JSONL files below:
 
 ```text
 ~/.claude/projects/<project-id>/<session-id>.jsonl
 ```
 
-Each line is a JSON object representing an event in the session.
+Given a session ID, `llme`:
 
-`llme`:
+1. Recursively searches that directory for `<session-id>.jsonl`.
+2. Parses the session one event at a time.
+3. Keeps user, assistant, and system text.
+4. Ignores metadata, thinking, and tool-use blocks.
+5. Merges consecutive messages with the same role.
+6. Renders the normalized conversation as Markdown.
 
-1. Searches `~/.claude/projects` recursively for the requested session ID
-2. Parses the JSONL file line by line
-3. Extracts conversation messages
-4. Ignores internal/meta events when possible
-5. Normalizes the conversation into a simple internal structure
-6. Renders the session as Markdown
-7. Either prints it to stdout or copies it to the clipboard
+Session IDs are restricted to ASCII letters, numbers, hyphens, and underscores.
 
-## Current output format
+## Installation
 
-The exported Markdown is wrapped with extra handoff context so that if you paste it into another LLM, the receiving model understands what it is.
+### Requirements
 
-Example shape:
+- A current stable [Rust toolchain](https://www.rust-lang.org/tools/install)
+- Local Claude Code session files under `~/.claude/projects`
+- For clipboard mode:
+  - macOS: `pbcopy` (included with macOS)
+  - Windows: `clip`
+  - Linux: `wl-copy` or `xclip`
+
+### Install from source
+
+```bash
+git clone https://github.com/francofl99/llm-context-export.git
+cd llm-context-export
+cargo install --path . --force
+```
+
+The executable is installed as `llme`, usually under `~/.cargo/bin`. Ensure that directory is in your `PATH`:
+
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+You can also run the repository's helper script:
+
+```bash
+./install.sh
+```
+
+## Usage
+
+Export a session to standard output:
+
+```bash
+llme export claude --session <session-id>
+```
+
+Copy it directly to the clipboard:
+
+```bash
+llme export claude --session <session-id> --clipboard
+# Short form:
+llme export claude --session <session-id> -c
+```
+
+Use `--help` at any level to inspect the available commands:
+
+```bash
+llme --help
+llme export --help
+llme export claude --help
+```
+
+### Output shape
 
 ```md
 Esta es una sesión exportada de `Claude`:
@@ -60,272 +130,52 @@ You can use the WhatsApp Web protocol...
 Necesito que la revises, me digas si entendés el contexto, para poder continuar trabajando desde acá.
 ```
 
-## Installation
+The wrapper is currently written in Spanish because the original workflow uses it as handoff context. Configurable templates are planned.
 
-### Requirements
-
-- Rust toolchain installed
-- Cargo available in your shell
-- Access to local Claude Code session files under `~/.claude/projects`
-
-### Install globally as `llme`
-
-From the project root:
+## Development
 
 ```bash
-cargo install --path . --force
+cargo build
+cargo test --all-features
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-This installs the executable as:
+Or run the full local verification suite:
 
 ```bash
-~/.cargo/bin/llme
+make check
 ```
 
-If `llme` is not found after installation, make sure this is in your shell config:
-
-```bash
-export PATH="$HOME/.cargo/bin:$PATH"
-```
-
-Then reload your shell:
-
-```bash
-source ~/.zshrc
-```
-
-### Install via helper script
-
-You can also use the provided helper:
-
-```bash
-./install.sh
-```
-
-## Usage
-
-### Export to stdout
-
-```bash
-llme export claude --session <session-id>
-```
-
-Example:
-
-```bash
-llme export claude --session 797df13f-41e5-4ccd-9f00-d6f6b9bee0b3
-```
-
-### Export directly to clipboard
-
-```bash
-llme export claude --session <session-id> --clipboard
-```
-
-Short version:
-
-```bash
-llme export claude --session <session-id> -c
-```
-
-In clipboard mode:
-
-- the Markdown is copied directly to the system clipboard
-- the session content is not printed to stdout
-- a short confirmation is printed to stderr
-
-## Local development
-
-### Run without installing
-
-From the project root:
+Run without installing:
 
 ```bash
 cargo run -- export claude --session <session-id>
 ```
 
-Or with clipboard mode:
-
-```bash
-cargo run -- export claude --session <session-id> --clipboard
-```
-
-### Common development commands
-
-```bash
-cargo build
-cargo test
-cargo install --path . --force
-```
-
-## Makefile
-
-The project includes a `Makefile` for common tasks.
-
-Available commands:
-
-```bash
-make help
-make build
-make test
-make install
-make run ARGS="export claude --session <session-id>"
-```
-
-Examples:
-
-```bash
-make test
-make install
-make run ARGS="export claude --session 797df13f-41e5-4ccd-9f00-d6f6b9bee0b3 --clipboard"
-```
-
-## Project structure
+### Project structure
 
 ```text
 src/
-  main.rs
-  cli.rs
-  providers/
-    mod.rs
-    claude.rs
-  core/
-    session.rs
-    message.rs
-  export/
-    markdown.rs
-    clipboard.rs
+├── main.rs                 # CLI entrypoint
+├── cli.rs                  # clap command definitions
+├── core/                   # provider-agnostic session model
+├── providers/claude.rs     # Claude discovery and JSONL parsing
+└── export/                 # Markdown rendering and clipboard integration
 ```
 
-### Key modules
+## Roadmap
 
-- `src/main.rs` — CLI entrypoint and top-level command flow
-- `src/cli.rs` — `clap` command definitions
-- `src/providers/mod.rs` — provider abstraction
-- `src/providers/claude.rs` — Claude session discovery and JSONL parsing
-- `src/core/session.rs` — normalized session model and message merging
-- `src/core/message.rs` — message roles and message type
-- `src/export/markdown.rs` — Markdown rendering and handoff wrapper
-- `src/export/clipboard.rs` — clipboard integration
+- File output with `--output <file.md>`
+- Configurable handoff templates and languages
+- Additional local LLM session providers
+- Optional secret-detection or redaction assistance
+- Improved Linux clipboard diagnostics
 
-## Internal model
+## Contributing
 
-The project normalizes provider data into a provider-agnostic structure:
-
-```rust
-struct Session {
-    id: String,
-    messages: Vec<Message>,
-}
-
-struct Message {
-    role: Role,
-    content: String,
-}
-
-enum Role {
-    User,
-    Assistant,
-    System,
-}
-```
-
-Providers implement a common abstraction:
-
-```rust
-trait Provider {
-    fn load_session(session_id: &str) -> Result<Session>;
-}
-```
-
-This makes it easier to add providers later such as:
-
-- OpenAI
-- Cursor
-- Ollama
-- others with local session storage
-
-## Claude provider behavior
-
-The Claude provider currently does the following:
-
-- recursively searches inside `~/.claude/projects`
-- looks for `<session-id>.jsonl`
-- reads the file line by line
-- parses each line as JSON
-- keeps only meaningful conversation events
-- extracts text from user/assistant/system messages
-- ignores metadata/internal events like progress and attachments
-- ignores assistant blocks such as `thinking` or `tool_use`
-- merges consecutive same-role messages to produce cleaner output
-
-This merge behavior matters because Claude often stores assistant output as multiple streamed events.
-
-## Notes about clipboard support
-
-Clipboard export is implemented locally.
-
-Current behavior by platform:
-
-- macOS: uses `pbcopy`
-- Windows: uses `clip`
-- Linux/Unix: tries `wl-copy`, then `xclip`
-
-For the current local environment, macOS is the main verified path.
-
-## Example workflow
-
-A common workflow is:
-
-1. Work with Claude Code locally
-2. Export a session with `llme`
-3. Copy it to the clipboard
-4. Paste it into another LLM
-5. Ask that LLM to continue from the exported context
-
-Example:
-
-```bash
-llme export claude --session 797df13f-41e5-4ccd-9f00-d6f6b9bee0b3 --clipboard
-```
-
-Then paste into another LLM conversation.
-
-## Updating after code changes
-
-If you modify the code:
-
-- `cargo build` only rebuilds the project locally
-- it does **not** update the globally installed `llme`
-
-To update the global command, run:
-
-```bash
-cargo install --path . --force
-```
-
-Or simply:
-
-```bash
-./install.sh
-```
-
-Or:
-
-```bash
-make install
-```
-
-## Future improvements
-
-Potential next steps:
-
-- add file output support such as `--output <file.md>`
-- support more providers
-- add configurable handoff templates
-- improve Linux clipboard detection and messaging
-- add `fmt`, `clippy`, and `clean` Makefile targets
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-At the moment, no license file has been added yet.
+Released under the [MIT License](LICENSE).

@@ -18,7 +18,9 @@ pub fn copy_text(text: &str) -> Result<()> {
         .context("failed to write export to clipboard")?;
     drop(stdin);
 
-    let status = child.wait().context("failed to wait for clipboard command")?;
+    let status = child
+        .wait()
+        .context("failed to wait for clipboard command")?;
     if !status.success() {
         bail!("clipboard command exited with status {status}");
     }

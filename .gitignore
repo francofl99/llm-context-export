@@ -1,1 +1,21 @@
-target
+# Rust build output
+/target/
+
+# OS and editor metadata
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local tool settings
+.claude/
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
